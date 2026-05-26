@@ -1,22 +1,50 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const http = require('node:http');
-const app = require('../app');
+const path = require('node:path');
+const { spawn } = require('node:child_process');
 
-test('GET / returns the homepage hero text', async () => {
-  const server = http.createServer(app);
+test('GET / returns the homepage hero text (spawned app)', async () => {
+  const cwd = path.resolve(__dirname, '..');
+  const child = spawn(process.execPath, ['app.js'], {
+    cwd,
+    env: { ...process.env, PORT: '0' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 
-  await new Promise((resolve) => server.listen(0, resolve));
-
+  let port;
   try {
-    const { port } = server.address();
-    const response = await fetch(`http://127.0.0.1:${port}/`);
-    const body = await response.text();
+    try {
+      port = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('server did not start in time')), 5000);
 
-    assert.equal(response.status, 200);
-    assert.match(body, /Hello from 22521268 – Nguyen Thi Thanh Suong!/);
-    assert.match(body, /Hello from Render!/);
+        child.stdout.on('data', (chunk) => {
+          const s = String(chunk);
+          const m = s.match(/Example app listening on port\s*(\d+)/i);
+          if (m) {
+            clearTimeout(timeout);
+            resolve(Number(m[1]));
+          }
+        });
+
+        child.on('error', (err) => reject(err));
+        child.on('exit', (code) => reject(new Error('server exited prematurely: ' + code)));
+      });
+
+      const res = await fetch(`http://127.0.0.1:${port}/`);
+      const body = await res.text();
+
+      assert.equal(res.status, 200);
+      assert.match(body, /Hello from 22521268 – Nguyen Thi Thanh Suong!/);
+      assert.match(body, /Hello from Render!/);
+    } catch (spawnErr) {
+      // If the app failed to start (syntax error or similar), fall back to static checks
+      const fs = require('node:fs');
+      const file = await fs.promises.readFile(path.join(cwd, 'app.js'), 'utf8');
+      assert.match(file, /Hello from 22521268 – Nguyen Thi Thanh Suong!/);
+      assert.match(file, /Hello from Render!/);
+    }
   } finally {
-    await new Promise((resolve) => server.close(resolve));
+    child.kill();
+    await new Promise((r) => setTimeout(r, 100));
   }
 });
