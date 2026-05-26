@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  build:
+    name: Checkout • Install • Test • Build Docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: |
+          corepack enable
+          yarn install --frozen-lockfile
+
+      - name: Check for test script
+        id: has_tests
+        run: |
+          node -e "const pkg=require('./package.json'); const has=!!(pkg.scripts && pkg.scripts.test); require('fs').writeFileSync(process.env.GITHUB_OUTPUT, `hasTests=${has}\n`);"
+
+      - name: Run tests
+        if: steps.has_tests.outputs.hasTests == 'true'
+        run: yarn test
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          tags: express-hello-world:${{ github.sha }}
+
+  notify:
+    name: Notify Result
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Notify success via commit comment
+        if: needs.build.result == 'success'
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const body = `CI succeeded for commit ${process.env.GITHUB_SHA}.
+            Workflow: ${process.env.GITHUB_WORKFLOW}
+            Run: ${process.env.GITHUB_RUN_ID}
+            See details: ${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: process.env.GITHUB_SHA,
+              body
+            });
+
+      - name: Notify failure in workflow summary
+        if: needs.build.result != 'success'
+        run: |
+          echo "CI failed for ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Workflow: ${GITHUB_WORKFLOW}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Ref: ${GITHUB_REF}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Details: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
