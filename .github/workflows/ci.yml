@@ -30,13 +30,7 @@ jobs:
           corepack enable
           yarn install --frozen-lockfile
 
-      - name: Check for test script
-        id: has_tests
-        run: |
-          node -e 'const pkg=require("./package.json"); const has=!!(pkg.scripts && pkg.scripts.test); require("fs").writeFileSync(process.env.GITHUB_OUTPUT, `hasTests=${has}\n`);'
-
       - name: Run tests
-        if: steps.has_tests.outputs.hasTests == 'true'
         run: yarn test
 
       - name: Setup Docker Buildx
@@ -74,7 +68,7 @@ jobs:
       - name: Notify failure in workflow summary
         if: needs.build.result != 'success'
         run: |
-          echo "CI failed for ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          echo "CI that bai o ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
           echo "Workflow: ${GITHUB_WORKFLOW}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Ref: ${GITHUB_REF}" >> "$GITHUB_STEP_SUMMARY"
-          echo "Details: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Reference: ${GITHUB_REF}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Thong tin chi tiet: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" >> "$GITHUB_STEP_SUMMARY"
